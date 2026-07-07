@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>My Money Road Map</title>
+<meta name="theme-color" content="#0f1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Road Map">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="styles.css?v=6">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <h1>Money Road Map</h1>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="daily">Daily Log</button>
+      <button class="tab-btn" data-tab="checkin">Sunday Check-in</button>
+      <button class="tab-btn" data-tab="roadmap">Roadmap</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="tab-panel active">
+
+      <div class="grid grid-3">
+        <div class="card goal-card">
+          <h2>$16,000 Goal (Ekub)</h2>
+          <div class="goal-ring-wrap">
+            <svg viewBox="0 0 140 140" class="goal-ring">
+              <circle cx="70" cy="70" r="60" class="ring-bg"/>
+              <circle cx="70" cy="70" r="60" class="ring-fg" id="goalRingFg"/>
+            </svg>
+            <div class="goal-ring-label">
+              <div id="goalPercent">0%</div>
+              <small>to goal</small>
+            </div>
+          </div>
+          <div class="goal-stats">
+            <div><span id="goalSaved">$0</span><small>saved</small></div>
+            <div><span id="goalTarget">$0</span><small>target</small></div>
+            <div><span id="goalDeadline">-</span><small>by</small></div>
+          </div>
+        </div>
+
+        <div class="card advice-card" id="adviceCard">
+          <h2>This Week's Plan</h2>
+          <div id="weekPlanBox"></div>
+        </div>
+
+        <div class="card">
+          <h2>Event Funds</h2>
+          <div id="eventFundsBox"></div>
+        </div>
+      </div>
+
+      <div class="card advice-card" id="bigAdviceCard">
+        <h2>Advice</h2>
+        <p id="adviceText"></p>
+      </div>
+
+      <div class="grid grid-4">
+        <div class="card stat-card">
+          <h2>Bank Balance</h2>
+          <div class="big-number" id="bankBalance">$0</div>
+          <p class="muted">cash cushion for weekly bills</p>
+        </div>
+        <div class="card stat-card">
+          <h2>Daily Spending Guide</h2>
+          <div class="big-number" id="dailyGuide">$0</div>
+          <p class="muted">food + fun + gas, per day</p>
+        </div>
+        <div class="card stat-card">
+          <h2>Uber Target / Week</h2>
+          <div class="big-number" id="uberTargetBig">$0</div>
+          <p class="muted" id="uberHoursNote"></p>
+        </div>
+        <div class="card stat-card">
+          <h2>Boss Owes You</h2>
+          <div class="big-number" id="receivableBig">$0</div>
+          <p class="muted">work receipts — hand them in at month end</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- DAILY LOG -->
+    <section id="tab-daily" class="tab-panel">
+
+      <div class="card">
+        <h2>Log Today</h2>
+        <p class="muted">Balances only move at the Sunday check-in — this is your day-by-day scoreboard against the plan.</p>
+        <form id="dailyForm" class="tx-form">
+          <div class="field-row">
+            <label class="field">
+              <span>Date</span>
+              <input type="date" id="dlDate" required>
+            </label>
+            <label class="field">
+              <span>Uber earned ($)</span>
+              <input type="number" id="dlUber" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Hours driven</span>
+              <input type="number" id="dlHours" min="0" step="0.1">
+            </label>
+            <label class="field">
+              <span>Spent today — food/fun/gas, not bills ($)</span>
+              <input type="number" id="dlSpend" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Work expense — boss refunds it ($)</span>
+              <input type="number" id="dlWork" min="0" step="0.01" value="0">
+            </label>
+            <label class="field field-grow">
+              <span>Note (optional)</span>
+              <input type="text" id="dlNote" placeholder="e.g. airport runs, coffee with youth">
+            </label>
+          </div>
+          <button type="submit" class="btn-primary">Add to Today</button>
+        </form>
+      </div>
+
+      <div class="card advice-card" id="dailyAdviceCard">
+        <h2>Today's Suggestion</h2>
+        <p id="dailyAdviceText"></p>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h2>Uber This Week</h2>
+          <div class="week-progress">
+            <div class="week-progress-top"><span id="uberWeekLabel"></span><span id="uberWeekPct"></span></div>
+            <div class="fund-bar"><div class="fund-bar-fill" id="uberWeekBar"></div></div>
+            <p class="muted" id="uberWeekNote"></p>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Everyday Spending This Week</h2>
+          <div class="week-progress">
+            <div class="week-progress-top"><span id="spendWeekLabel"></span><span id="spendWeekPct"></span></div>
+            <div class="fund-bar"><div class="fund-bar-fill spend-bar" id="spendWeekBar"></div></div>
+            <p class="muted" id="spendWeekNote"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Coming Up — Next 7 Days</h2>
+        <p class="muted">Bills and paychecks the system already knows about, so nothing surprises you.</p>
+        <div id="comingUpList" class="tx-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>This Week, Day by Day</h2>
+        <div id="dailyWeekList" class="tx-list"></div>
+      </div>
+
+    </section>
+
+    <!-- CHECK-IN -->
+    <section id="tab-checkin" class="tab-panel">
+
+      <div class="card">
+        <h2 id="checkinTitle">Sunday Check-in</h2>
+        <p class="muted" id="checkinSubtitle"></p>
+
+        <form id="checkinForm" class="tx-form">
+          <h3 class="form-section">Money in this week</h3>
+          <div class="field-row">
+            <label class="field">
+              <span>Uber earned ($)</span>
+              <input type="number" id="ciUber" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Uber hours (optional)</span>
+              <input type="number" id="ciHours" min="0" step="0.1">
+            </label>
+            <label class="field">
+              <span>Salary received ($)</span>
+              <input type="number" id="ciSalary" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Other income ($)</span>
+              <input type="number" id="ciOther" min="0" step="0.01" value="0">
+            </label>
+          </div>
+
+          <h3 class="form-section">Money out this week</h3>
+          <div class="field-row">
+            <label class="field">
+              <span>Regular spending — bills + food + gas + fun ($)</span>
+              <input type="number" id="ciSpend" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Put into Ekub ($)</span>
+              <input type="number" id="ciEkub" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Put into event fund ($)</span>
+              <input type="number" id="ciEvent" min="0" step="0.01" value="0">
+            </label>
+          </div>
+
+          <h3 class="form-section">Work expenses (boss refunds these)</h3>
+          <div class="field-row">
+            <label class="field">
+              <span>Work expenses paid this week ($)</span>
+              <input type="number" id="ciWork" min="0" step="0.01" value="0">
+            </label>
+            <label class="field">
+              <span>Refund received from boss this week ($)</span>
+              <input type="number" id="ciReimb" min="0" step="0.01" value="0">
+            </label>
+          </div>
+
+          <h3 class="form-section">Event spending (only if it happened this week)</h3>
+          <div class="field-row">
+            <label class="field">
+              <span>Which event</span>
+              <select id="ciEventSelect"><option value="">— none —</option></select>
+            </label>
+            <label class="field">
+              <span>Amount spent ($)</span>
+              <input type="number" id="ciEventSpent" min="0" step="0.01" value="0">
+            </label>
+            <label class="field field-grow">
+              <span>Note (optional)</span>
+              <input type="text" id="ciNote" placeholder="anything worth remembering">
+            </label>
+          </div>
+
+          <button type="submit" class="btn-primary">Save Week &amp; Show Next Week's Plan</button>
+        </form>
+      </div>
+
+      <div class="card next-plan" id="nextPlanCard" style="display:none">
+        <h2>Next Week's Plan</h2>
+        <div id="nextPlanBox"></div>
+      </div>
+
+      <div class="card">
+        <h2>Past Check-ins</h2>
+        <div id="checkinHistory" class="tx-list"></div>
+      </div>
+
+    </section>
+
+    <!-- ROADMAP -->
+    <section id="tab-roadmap" class="tab-panel">
+      <div class="card">
+        <h2>Road Map to July 2027</h2>
+        <p class="muted">Projected week by week from today, assuming you hit the Uber target each week. It recalculates automatically after every check-in.</p>
+        <div class="table-scroll">
+          <table id="roadmapTable">
+            <thead>
+              <tr>
+                <th>Week</th><th>Dates</th><th>Salary</th><th>Bills due</th>
+                <th>Uber target</th><th>Events</th><th>Bank</th><th>Ekub</th><th>Event fund</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab-panel">
+
+      <div class="card">
+        <h2>Current Balances (set these once to match reality)</h2>
+        <div class="field-row">
+          <label class="field"><span>Bank balance ($)</span><input type="number" id="setBank" step="0.01"></label>
+          <label class="field"><span>Ekub saved so far ($)</span><input type="number" id="setEkub" step="0.01"></label>
+          <label class="field"><span>Boss owes you ($)</span><input type="number" id="setReceivable" step="0.01"></label>
+        </div>
+        <div id="setEventSaved" class="field-row"></div>
+        <button id="saveBalances" class="btn-primary">Save Balances</button>
+      </div>
+
+      <div class="card">
+        <h2>Goal</h2>
+        <div class="field-row">
+          <label class="field"><span>Goal amount ($)</span><input type="number" id="setGoalAmount" step="1"></label>
+          <label class="field"><span>Goal date</span><input type="date" id="setGoalDate"></label>
+          <label class="field"><span>Ekub per week ($)</span><input type="number" id="setEkubWeekly" step="1"></label>
+        </div>
+        <button id="saveGoal" class="btn-primary">Save Goal</button>
+      </div>
+
+      <div class="card">
+        <h2>Income</h2>
+        <div class="field-row">
+          <label class="field"><span>Salary per paycheck ($)</span><input type="number" id="setSalary" step="0.01"></label>
+          <label class="field"><span>Uber rate ($/hour)</span><input type="number" id="setRate" step="0.5"></label>
+        </div>
+        <p class="muted hint" id="rateHint"></p>
+        <button id="saveIncome" class="btn-primary">Save Income</button>
+      </div>
+
+      <div class="card">
+        <h2>Weekly Living Budget</h2>
+        <div class="field-row">
+          <label class="field"><span>Food ($)</span><input type="number" id="setFood" step="1"></label>
+          <label class="field"><span>Entertainment ($)</span><input type="number" id="setEnt" step="1"></label>
+          <label class="field"><span>Gas ($)</span><input type="number" id="setGas" step="1"></label>
+        </div>
+        <button id="saveLiving" class="btn-primary">Save Living Budget</button>
+      </div>
+
+      <div class="card">
+        <h2>Monthly Bills</h2>
+        <div id="billInputs" class="budget-grid"></div>
+        <button id="saveBills" class="btn-primary">Save Bills</button>
+      </div>
+
+      <div class="card">
+        <h2>Events</h2>
+        <div id="eventList"></div>
+        <div class="field-row">
+          <label class="field"><span>Name</span><input type="text" id="newEventName"></label>
+          <label class="field"><span>Amount ($)</span><input type="number" id="newEventAmount" step="1"></label>
+          <label class="field"><span>Date needed</span><input type="date" id="newEventDate"></label>
+          <button id="addEvent" class="btn-secondary" type="button">Add Event</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Data</h2>
+        <div class="field-row">
+          <button id="exportBtn" class="btn-secondary">Export Backup (JSON)</button>
+          <button id="importBtn" class="btn-secondary">Import Backup</button>
+          <input type="file" id="importFile" accept="application/json" style="display:none">
+          <button id="resetBtn" class="btn-danger">Reset All Data</button>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js?v=6"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>

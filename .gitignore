@@ -1,0 +1,5 @@
+# local tooling / session config
+.claude/
+
+# personal data backups — never commit real finances
+*backup*.json
