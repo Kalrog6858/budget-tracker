@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 <div class="app">
@@ -35,7 +35,7 @@
 
       <div class="grid grid-3">
         <div class="card goal-card">
-          <h2>$16,000 Goal (Ekub)</h2>
+          <h2 id="goalCardTitle">Savings Goal</h2>
           <div class="goal-ring-wrap">
             <svg viewBox="0 0 140 140" class="goal-ring">
               <circle cx="70" cy="70" r="60" class="ring-bg"/>
@@ -67,6 +67,11 @@
       <div class="card advice-card" id="bigAdviceCard">
         <h2>Advice</h2>
         <p id="adviceText"></p>
+      </div>
+
+      <div class="card" id="bankOutlookCard">
+        <h2>Your Bank Account — What to Expect</h2>
+        <div id="bankOutlookBox"></div>
       </div>
 
       <div class="grid grid-4">
@@ -351,7 +356,7 @@
   </main>
 </div>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

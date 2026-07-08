@@ -2,7 +2,7 @@
 // Strategy: network-first for GET requests, so whenever you have a connection
 // you always get the latest version; when you're offline it falls back to the
 // last cached copy. Bump CACHE when the asset list changes.
-const CACHE = 'money-road-map-v6';
+const CACHE = 'money-road-map-v7';
 const ASSETS = [
   './',
   './index.html',

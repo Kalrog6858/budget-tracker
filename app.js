@@ -295,9 +295,42 @@ function eventWeeklyNeeds(fromWeek) {
   });
 }
 
+// Extra weekly savings (on top of the fixed Ekub) needed to actually reach
+// the goal amount by the goal date. This is what makes the goal number in
+// Settings drive the whole plan: raise the goal and every weekly target
+// restructures to cover it.
+function goalTopUpWeekly(fromWeek) {
+  const endWeek = goalWeekIndex();
+  const weeksLeft = Math.max(endWeek - fromWeek + 1, 1);
+  const projected = state.balances.ekub + state.settings.ekubWeekly * weeksLeft;
+  const shortfall = Math.max(state.settings.goalAmount - projected, 0);
+  return shortfall / weeksLeft;
+}
+
+// each bill due in week w, with the exact calendar date it lands on
+function billDatesForWeek(w) {
+  return billsForWeek(w).map(b => {
+    let date;
+    if (b.rule === 'salary') {
+      date = salaryDateOfWeek(w);
+    } else {
+      const s = weekStart(w);
+      for (let d = 0; d < 7; d++) {
+        const dd = addDays(s, d);
+        if (dd.getDate() === b.day) { date = dd; break; }
+      }
+    }
+    return { bill: b, date: date || weekStart(w) };
+  }).sort((a, b) => a.date - b.date);
+}
+
+function fmtDay(d) {
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 // Simulate a stretch of weeks with a fixed weekly Uber target.
 // Mutates nothing; returns rows plus final balances and the lowest bank point.
-function runSim(fromWeek, toWeek, target, startBank, startEkub, evStateIn) {
+function runSim(fromWeek, toWeek, target, startBank, startEkub, evStateIn, topUp = 0) {
   let bank = startBank;
   let ekub = startEkub;
   const evSaved = {}, evSpent = {};
@@ -340,14 +373,15 @@ function runSim(fromWeek, toWeek, target, startBank, startEkub, evStateIn) {
       }
     });
 
-    ekub += state.settings.ekubWeekly;
-    bank += salary + target - livingTotal() - billTotal - state.settings.ekubWeekly - eventContrib;
+    ekub += state.settings.ekubWeekly + topUp;
+    bank += salary + target - livingTotal() - billTotal - state.settings.ekubWeekly - topUp - eventContrib;
 
     if (bank < minBank) { minBank = bank; minBankWeek = w; }
 
     rows.push({
       week: w, start: weekStart(w), end: weekEnd(w),
       salary, bills, billTotal, target, eventNotes,
+      eventContrib, savings: state.settings.ekubWeekly + topUp,
       bank, ekub,
       eventFund: Object.keys(evSaved).reduce((s, k) => s + evSaved[k], 0),
     });
@@ -362,11 +396,11 @@ function runSim(fromWeek, toWeek, target, startBank, startEkub, evStateIn) {
 
 // Smallest weekly target (rounded up to $10) that keeps the bank above the floor
 // for the whole stretch and ends at or above the floor.
-function solveTarget(fromWeek, toWeek, startBank, startEkub, evStateIn, floor) {
+function solveTarget(fromWeek, toWeek, startBank, startEkub, evStateIn, floor, topUp) {
   if (fromWeek > toWeek) return 0;
   let lo = 0, hi = 5000;
   const ok = t => {
-    const sim = runSim(fromWeek, toWeek, t, startBank, startEkub, evStateIn);
+    const sim = runSim(fromWeek, toWeek, t, startBank, startEkub, evStateIn, topUp);
     return sim.minBank >= floor;
   };
   if (ok(0)) return 0;
@@ -384,10 +418,11 @@ function solveTarget(fromWeek, toWeek, startBank, startEkub, evStateIn, floor) {
 function computePlan(fromWeek) {
   const endWeek = goalWeekIndex();
   if (fromWeek > endWeek) {
-    return { rows: [], segments: [], currentTarget: 0, minBank: state.balances.bank, minBankWeek: fromWeek, finalEkub: state.balances.ekub, finalBank: state.balances.bank };
+    return { rows: [], segments: [], currentTarget: 0, topUp: 0, minBank: state.balances.bank, minBankWeek: fromWeek, finalEkub: state.balances.ekub, finalBank: state.balances.bank };
   }
 
   const floor = MIN_BUFFER / 2;
+  const topUp = goalTopUpWeekly(fromWeek);
   const boundaries = [...new Set(
     upcomingEvents(fromWeek)
       .map(ev => weekIndexOf(parseDate(ev.deadline)))
@@ -402,8 +437,8 @@ function computePlan(fromWeek) {
 
   boundaries.forEach(segEnd => {
     if (segStart > segEnd) return;
-    const target = solveTarget(segStart, segEnd, bank, ekub, evState, floor);
-    const sim = runSim(segStart, segEnd, target, bank, ekub, evState);
+    const target = solveTarget(segStart, segEnd, bank, ekub, evState, floor, topUp);
+    const sim = runSim(segStart, segEnd, target, bank, ekub, evState, topUp);
     rows = rows.concat(sim.rows);
     segments.push({ from: segStart, to: segEnd, target });
     if (sim.minBank < minBank) { minBank = sim.minBank; minBankWeek = sim.minBankWeek; }
@@ -412,7 +447,7 @@ function computePlan(fromWeek) {
   });
 
   return {
-    rows, segments,
+    rows, segments, topUp,
     currentTarget: segments.length ? segments[0].target : 0,
     minBank, minBankWeek,
     finalEkub: ekub, finalBank: bank,
@@ -429,7 +464,11 @@ function buildAdvice() {
 
   let text = '';
 
-  text += `Your number this week is ${formatMoney(plan.currentTarget)} on Uber (about ${hours.toFixed(0)} hours at ${formatMoney(rate)}/hr) — remember, what you drive this week lands in your account Tuesday and carries next week. That covers everything — bills, food, your ${formatMoney(state.settings.ekubWeekly)} Ekub, and every event on the calendar. `;
+  const weeklySave = state.settings.ekubWeekly + plan.topUp;
+  const saveLabel = plan.topUp > 0.5
+    ? `${formatMoney(weeklySave)} weekly savings (${formatMoney(state.settings.ekubWeekly)} Ekub + ${formatMoney(plan.topUp)} goal top-up)`
+    : `${formatMoney(state.settings.ekubWeekly)} Ekub`;
+  text += `Your number this week is ${formatMoney(plan.currentTarget)} on Uber (about ${hours.toFixed(0)} hours at ${formatMoney(rate)}/hr) — remember, what you drive this week lands in your account Tuesday and carries next week. That covers everything — bills, food, your ${saveLabel}, and every event on the calendar. `;
 
   if (plan.segments.length > 1) {
     const steps = plan.segments.map(s => {
@@ -470,26 +509,61 @@ function renderDashboard() {
   // this week's plan (or next week's, if this week is already checked in)
   const cur = planningWeekIndex();
   const advice = buildAdvice();
-  const bills = billsForWeek(cur);
   const salary = isSalaryWeek(cur) ? state.settings.salaryAmount : 0;
   const evNeeds = eventWeeklyNeeds(cur);
   const evTotal = evNeeds.reduce((s, n) => s + n.weekly, 0);
+  const weeklySave = state.settings.ekubWeekly + advice.plan.topUp;
+
+  document.getElementById('goalCardTitle').textContent = formatMoney(state.settings.goalAmount) + ' Goal (Ekub)';
 
   let planHtml = `<div class="plan-line"><span>Week ${cur}</span><strong>${fmtRange(weekStart(cur), weekEnd(cur))}</strong></div>`;
   planHtml += `<div class="plan-line"><span>Uber target</span><strong>${formatMoney(advice.plan.currentTarget)}</strong></div>`;
-  planHtml += `<div class="plan-line"><span>Salary</span><strong>${salary ? formatMoney(salary) + ' ✓' : 'not this week'}</strong></div>`;
-  planHtml += `<div class="plan-line"><span>Bills due</span><strong>${bills.length ? bills.map(b => b.name).join(', ') + ' (' + formatMoney(bills.reduce((s, b) => s + b.amount, 0)) + ')' : 'none'}</strong></div>`;
-  planHtml += `<div class="plan-line"><span>Ekub</span><strong>${formatMoney(state.settings.ekubWeekly)}</strong></div>`;
+  planHtml += `<div class="plan-line"><span>Salary</span><strong>${salary ? formatMoney(salary) + ' — ' + fmtDay(salaryDateOfWeek(cur)) : 'not this week'}</strong></div>`;
+  planHtml += `<div class="plan-line"><span>Savings (goal)</span><strong>${formatMoney(weeklySave)}${advice.plan.topUp > 0.5 ? ' (' + formatMoney(state.settings.ekubWeekly) + ' Ekub + ' + formatMoney(advice.plan.topUp) + ' top-up)' : ''}</strong></div>`;
   planHtml += `<div class="plan-line"><span>Event fund</span><strong>${formatMoney(evTotal)}</strong></div>`;
+
+  // every bill this week, each with its exact date
+  const billDates = billDatesForWeek(cur);
+  planHtml += `<div class="plan-divider">Bills this week — pay on these days:</div>`;
+  if (billDates.length === 0) {
+    planHtml += `<div class="plan-line"><span>No bills this week</span><strong>🎉</strong></div>`;
+  } else {
+    billDates.forEach(bd => {
+      planHtml += `<div class="plan-line"><span>${fmtDay(bd.date)}</span><strong>${bd.bill.name} — ${formatMoney(bd.bill.amount)}</strong></div>`;
+    });
+  }
 
   // what this week's driving is paying for: Uber money lands next Tuesday
   const nxt = cur + 1;
-  const nxtBills = billsForWeek(nxt);
+  const nxtBillDates = billDatesForWeek(nxt);
   const nxtSalary = isSalaryWeek(nxt);
   planHtml += `<div class="plan-divider">This week's driving pays for next week (lands Tuesday):</div>`;
-  planHtml += `<div class="plan-line"><span>Next week's bills</span><strong>${nxtBills.length ? nxtBills.map(b => b.name).join(', ') + ' (' + formatMoney(nxtBills.reduce((s, b) => s + b.amount, 0)) + ')' : 'none'}</strong></div>`;
-  planHtml += `<div class="plan-line"><span>Next week's salary</span><strong>${nxtSalary ? formatMoney(state.settings.salaryAmount) + ' coming' : 'none — Uber carries the week'}</strong></div>`;
+  planHtml += `<div class="plan-line"><span>Next week's bills</span><strong>${nxtBillDates.length ? nxtBillDates.map(bd => bd.bill.name + ' (' + fmtDay(bd.date) + ')').join(', ') : 'none'}</strong></div>`;
+  planHtml += `<div class="plan-line"><span>Next week's salary</span><strong>${nxtSalary ? formatMoney(state.settings.salaryAmount) + ' — ' + fmtDay(salaryDateOfWeek(nxt)) : 'none — Uber carries the week'}</strong></div>`;
   document.getElementById('weekPlanBox').innerHTML = planHtml;
+
+  // bank account outlook: what goes in, what comes out, what's left
+  const rows = advice.plan.rows;
+  let outHtml = `<div class="plan-line"><span>Bank today</span><strong>${formatMoney(state.balances.bank)}</strong></div>`;
+  [rows[0], rows[1]].forEach(r => {
+    if (!r) return;
+    const moneyIn = r.salary + r.target;
+    const moneyOut = r.billTotal + livingTotal() + r.savings + r.eventContrib;
+    outHtml += `<div class="plan-divider">Week of ${fmtRange(r.start, r.end)}:</div>`;
+    outHtml += `<div class="plan-line"><span>Money in</span><strong>${r.salary ? 'Salary ' + formatMoney(r.salary) + ' + ' : ''}Uber ${formatMoney(r.target)} = ${formatMoney(moneyIn)}</strong></div>`;
+    outHtml += `<div class="plan-line"><span>Money out</span><strong>Bills ${formatMoney(r.billTotal)} + Living ${formatMoney(livingTotal())} + Savings ${formatMoney(r.savings)} + Events ${formatMoney(r.eventContrib)} = ${formatMoney(moneyOut)}</strong></div>`;
+    r.eventNotes.forEach(n => { outHtml += `<div class="plan-line event-due"><span>🎉 Planned spend</span><strong>${n}</strong></div>`; });
+    outHtml += `<div class="plan-line highlight"><span>Bank on ${fmtDay(r.end)}</span><strong>${formatMoney(r.bank)}</strong></div>`;
+  });
+  outHtml += `<div class="plan-divider">To stay on your ${formatMoney(state.settings.goalAmount)} plan, put aside each week:</div>`;
+  outHtml += `<div class="plan-line"><span>Into Ekub / savings</span><strong>${formatMoney(weeklySave)}</strong></div>`;
+  if (evTotal > 0) {
+    outHtml += `<div class="plan-line"><span>Into event fund</span><strong>${formatMoney(evTotal)} (${evNeeds.map(n => n.ev.name + ' ' + formatMoney(n.weekly)).join(', ')})</strong></div>`;
+  }
+  if (advice.plan.minBank < 0) {
+    outHtml += `<p class="warn-note">⚠ On the current plan your bank would dip below zero the week of ${fmtDate(weekStart(advice.plan.minBankWeek))} — raise the Uber target or trim an expense.</p>`;
+  }
+  document.getElementById('bankOutlookBox').innerHTML = outHtml;
 
   // event funds
   let evHtml = '';
@@ -671,7 +745,7 @@ function renderCheckin() {
     '. Fill this in at the end of Sunday.';
 
   document.getElementById('ciSalary').value = isSalaryWeek(w) ? state.settings.salaryAmount : 0;
-  document.getElementById('ciEkub').value = state.settings.ekubWeekly;
+  document.getElementById('ciEkub').value = Math.round(state.settings.ekubWeekly + goalTopUpWeekly(w));
   const evTotal = eventWeeklyNeeds(w).reduce((s, n) => s + n.weekly, 0);
   document.getElementById('ciEvent').value = Math.round(evTotal);
 
@@ -738,10 +812,12 @@ function renderNextPlan(week) {
 
   let html = `<div class="plan-line"><span>Week ${week}</span><strong>${fmtRange(weekStart(week), weekEnd(week))}</strong></div>`;
   html += `<div class="plan-line highlight"><span>Drive for</span><strong>${formatMoney(target)} on Uber (≈ ${(target / rate).toFixed(0)} hrs)</strong></div>`;
-  html += `<div class="plan-line"><span>Salary coming</span><strong>${salary ? formatMoney(salary) : 'no — Uber week'}</strong></div>`;
-  html += `<div class="plan-line"><span>Bills to pay</span><strong>${bills.length ? bills.map(b => b.name + ' ' + formatMoney(b.amount)).join(', ') : 'none'}</strong></div>`;
+  html += `<div class="plan-line"><span>Salary coming</span><strong>${salary ? formatMoney(salary) + ' — ' + fmtDay(salaryDateOfWeek(week)) : 'no — Uber week'}</strong></div>`;
+  const bd = billDatesForWeek(week);
+  html += `<div class="plan-line"><span>Bills to pay</span><strong>${bd.length ? bd.map(x => x.bill.name + ' ' + formatMoney(x.bill.amount) + ' (' + fmtDay(x.date) + ')').join(', ') : 'none'}</strong></div>`;
   html += `<div class="plan-line"><span>Live on</span><strong>${formatMoney(livingTotal())} (${formatMoney(livingTotal() / 7)}/day)</strong></div>`;
-  html += `<div class="plan-line"><span>Move to Ekub</span><strong>${formatMoney(state.settings.ekubWeekly)}</strong></div>`;
+  html += `<div class="plan-line"><span>Move to Ekub / savings</span><strong>${formatMoney(state.settings.ekubWeekly + plan.topUp)}${plan.topUp > 0.5 ? ' (includes ' + formatMoney(plan.topUp) + ' goal top-up)' : ''}</strong></div>`;
+  html += `<div class="plan-line"><span>Expected bank at week's end</span><strong>${plan.rows.length ? formatMoney(plan.rows[0].bank) : '—'}</strong></div>`;
   if (evTotal > 0) {
     html += `<div class="plan-line"><span>Move to event fund</span><strong>${formatMoney(evTotal)} (${evNeeds.map(n => n.ev.name + ' ' + formatMoney(n.weekly)).join(', ')})</strong></div>`;
   }
